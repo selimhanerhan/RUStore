@@ -1,2 +1,2 @@
 # RUStore
-Remote object store service project 
+Remote object store service project using TCP 
