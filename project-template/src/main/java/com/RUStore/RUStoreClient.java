@@ -1,11 +1,23 @@
 package com.RUStore;
 
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.UnknownHostException;
+
 /* any necessary Java packages here */
 
 public class RUStoreClient {
 
 	/* any necessary class members here */
-
+	private final String host;
+	private final int port;
+	private Socket socket;
+	private DataOutputStream out;
+	private BufferedReader in;
 	/**
 	 * RUStoreClient Constructor, initializes default values
 	 * for class members
@@ -14,9 +26,8 @@ public class RUStoreClient {
 	 * @param port	port number
 	 */
 	public RUStoreClient(String host, int port) {
-
-		// Implement here
-
+		this.host = host;
+		this.port = port;
 	}
 
 	/**
@@ -24,10 +35,22 @@ public class RUStoreClient {
 	 * running on a given host and port.
 	 *
 	 * @return		n/a, however throw an exception if any issues occur
+	 * @throws IOException
+	 * @throws UnknownHostException
 	 */
-	public void connect() {
-
-		// Implement here
+	public void connect()  {
+		try {
+			socket = new Socket(host, port);
+			socket.connect(new InetSocketAddress(host,port));
+			out = new DataOutputStream(socket.getOutputStream());
+			in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
 
 	}
 
@@ -44,7 +67,8 @@ public class RUStoreClient {
 	 *        		Throw an exception otherwise
 	 */
 	public int put(String key, byte[] data) {
-
+		
+		
 		// Implement here
 		return -1;
 
@@ -143,6 +167,14 @@ public class RUStoreClient {
 	public void disconnect() {
 
 		// Implement here
+		try {
+			out.close();
+			in.close();
+			socket.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 	}
 
