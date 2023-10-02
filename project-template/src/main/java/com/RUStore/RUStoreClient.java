@@ -7,6 +7,9 @@ import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+
+import static com.RUStore.constants.*;
 
 /* any necessary Java packages here */
 
@@ -18,6 +21,7 @@ public class RUStoreClient {
 	private Socket socket;
 	private DataOutputStream out;
 	private BufferedReader in;
+	
 	/**
 	 * RUStoreClient Constructor, initializes default values
 	 * for class members
@@ -168,6 +172,10 @@ public class RUStoreClient {
 
 		// Implement here
 		try {
+			ByteBuffer buffer = ByteBuffer.allocate( OPERATION_DISCONNECT.getByteLength());
+			buffer.putInt( OPERATION_DISCONNECT.getCode());
+			out.write(buffer.array());
+
 			out.close();
 			in.close();
 			socket.close();
