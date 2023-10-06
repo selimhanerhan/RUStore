@@ -1,8 +1,15 @@
 package com.RUStore;
 
-import java.io.BufferedReader;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -20,7 +27,7 @@ public class RUStoreClient {
 	private final int port;
 	private Socket socket;
 	private DataOutputStream out;
-	private BufferedReader in;
+	private InputStream in;
 	
 	/**
 	 * RUStoreClient Constructor, initializes default values
@@ -47,7 +54,7 @@ public class RUStoreClient {
 			socket = new Socket(host, port);
 			socket.connect(new InetSocketAddress(host,port));
 			out = new DataOutputStream(socket.getOutputStream());
-			in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			in = new BufferedInputStream(socket.getInputStream());
 			
 		} catch (UnknownHostException e) {
 			e.printStackTrace();
@@ -69,12 +76,26 @@ public class RUStoreClient {
 	 * @return		0 upon success
 	 *        		1 if key already exists
 	 *        		Throw an exception otherwise
+	 * @throws IOException
+	 * @throws InterruptedException
 	 */
-	public int put(String key, byte[] data) {
+	public int put(String key, byte[] data) throws IOException, InterruptedException {
+		ByteBuffer buffer = ByteBuffer.allocate(oPut.getByteLength() + BYTES_PER_INTEGER + key.getBytes().length + BYTES_PER_INTEGER + data.length);
+		buffer.putInt( oPut.getCode());
+		buffer.putInt(key.getBytes().length);
+		buffer.putInt(data.length);
+		buffer.put(data);
+
 		
+		out.write(buffer.array());
+		out.flush();
+		Thread.sleep(200);
+		byte[] response = new byte[BYTES_PER_INTEGER];
+		in.read(response, 0 , BYTES_PER_INTEGER);
+
 		
 		// Implement here
-		return -1;
+		return ByteBuffer.wrap(response).getInt();
 
 	}
 
@@ -89,11 +110,18 @@ public class RUStoreClient {
 	 * @return		0 upon success
 	 *        		1 if key already exists
 	 *        		Throw an exception otherwise
+	 * @throws IOException
+	 * @throws FileNotFoundException
+	 * @throws InterruptedException
 	 */
-	public int put(String key, String file_path) {
-
+	public int put(String key, String file_path) throws FileNotFoundException, IOException, InterruptedException {
+		File file = new File(file_path);
+		byte[] data = new byte[(int) file.length()];
+		try(FileInputStream in = new FileInputStream(file)){
+			in.read(data);
+		}
 		// Implement here
-		return -1;
+		return put(key, data);
 
 	}
 
@@ -105,11 +133,34 @@ public class RUStoreClient {
 	 * 
 	 * @return		object data as a byte array, null if key doesn't exist.
 	 *        		Throw an exception if any other issues occur.
+	 * @throws IOException
 	 */
-	public byte[] get(String key) {
+	public byte[] get(String key) throws IOException {
+		ByteBuffer buffer = ByteBuffer.allocate( oGet.getByteLength() + BYTES_PER_INTEGER + key.getBytes().length);
+		buffer.putInt(oGet.getCode());
+		buffer.putInt(key.getBytes().length);
+		buffer.put(key.getBytes());
 
+		out.write(buffer.array());
+		out.flush();
+
+		byte[] response = new byte[BYTES_PER_INTEGER];
+		in.read(response);
+		int code = ByteBuffer.wrap(response).getInt();
+
+		if(code == KEY_ALREADY_EXIST){
+			response = new byte[BYTES_PER_INTEGER];
+			in.read(response);
+			int objectLength = ByteBuffer.wrap(response).getInt();
+			response = new byte[objectLength];
+			in.read(response);
+			return ByteBuffer.wrap(response).array();
+		}
+		else{
+			return null;
+		}
+		
 		// Implement here
-		return null;
 
 	}
 
@@ -123,11 +174,22 @@ public class RUStoreClient {
 	 * @return		0 upon success
 	 *        		1 if key doesn't exist
 	 *        		Throw an exception otherwise
+	 * @throws IOException
+	 * @throws FileNotFoundException
 	 */
-	public int get(String key, String file_path) {
-
+	public int get(String key, String file_path) throws FileNotFoundException, IOException {
+		byte[] data = get(key);
+		if(data == null){
+			return KEY_NOT_EXIST;
+		}
+		else{
+			File file = new File(file_path);
+			try(FileOutputStream out = new FileOutputStream((file))){
+				out.write(data);
+				return SUCCESS;
+			}
+		}
 		// Implement here
-		return -1;
 
 	}
 
@@ -141,11 +203,22 @@ public class RUStoreClient {
 	 * @return		0 upon success
 	 *        		1 if key doesn't exist
 	 *        		Throw an exception otherwise
+	 * @throws IOException
 	 */
-	public int remove(String key) {
+	public int remove(String key) throws IOException {
+		ByteBuffer buffer = ByteBuffer.allocate(oRemove.getByteLength() + BYTES_PER_INTEGER + key.getBytes().length);
+		buffer.putInt(oRemove.getCode());
+		buffer.putInt(key.getBytes().length);
+		buffer.put(key.getBytes());
+
+		out.write(buffer.array());
+		out.flush();
+
+		byte[] response = new byte[BYTES_PER_INTEGER];
+		in.read(response);
 
 		// Implement here
-		return -1;
+		return ByteBuffer.wrap(response).getInt();
 
 	}
 
@@ -154,11 +227,35 @@ public class RUStoreClient {
 	 * 
 	 * @return		List of keys as string array, null if there are no keys.
 	 *        		Throw an exception if any other issues occur.
+	 * @throws IOException
 	 */
-	public String[] list() {
+	public String[] list() throws IOException {
+		ByteBuffer buffer = ByteBuffer.allocate(oList.getByteLength());
+		buffer.putInt(oList.getCode());
 
+		out.write(buffer.array());
+		out.flush();
+
+		byte[] response = new byte[BYTES_PER_INTEGER];
+		in.read(response);
+		int size = ByteBuffer.wrap( response).getInt();
+
+		if(size == 0){
+			return null;
+		}
+
+		response = new byte[size];
+		in.read(response);
+		ByteArrayInputStream input = new ByteArrayInputStream(response);
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+		int len;
+		byte[] bytes = new byte[1024];
+		while(( len = input.read(bytes, 0, bytes.length)) != -1){
+			output.write(bytes, 0, len);
+		}
 		// Implement here
-		return null;
+		return output.toString().split("\\/");
 
 	}
 
@@ -172,8 +269,8 @@ public class RUStoreClient {
 
 		// Implement here
 		try {
-			ByteBuffer buffer = ByteBuffer.allocate( OPERATION_DISCONNECT.getByteLength());
-			buffer.putInt( OPERATION_DISCONNECT.getCode());
+			ByteBuffer buffer = ByteBuffer.allocate( oDisconnect.getByteLength());
+			buffer.putInt( oDisconnect.getCode());
 			out.write(buffer.array());
 
 			out.close();
