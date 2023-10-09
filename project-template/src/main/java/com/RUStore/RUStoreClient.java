@@ -1,6 +1,7 @@
 package com.RUStore;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -11,6 +12,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -20,267 +22,262 @@ import static com.RUStore.constants.*;
 
 /* any necessary Java packages here */
 
-public class RUStoreClient {
+public class RUStoreClient
+{
+    private Socket socket;
+    private final String host;
+    private final int port;
 
-	/* any necessary class members here */
-	private final String host;
-	private final int port;
-	private Socket socket;
-	private DataOutputStream out;
-	private InputStream in;
-	
-	/**
-	 * RUStoreClient Constructor, initializes default values
-	 * for class members
-	 *
-	 * @param host	host url
-	 * @param port	port number
-	 */
-	public RUStoreClient(String host, int port) {
-		this.host = host;
-		this.port = port;
-	}
+    private OutputStream out;
+    private InputStream in;
 
-	/**
-	 * Opens a socket and establish a connection to the object store server
-	 * running on a given host and port.
-	 *
-	 * @return		n/a, however throw an exception if any issues occur
-	 * @throws IOException
-	 * @throws UnknownHostException
-	 */
-	public void connect()  {
-		try {
-			socket = new Socket(host, port);
-			socket.connect(new InetSocketAddress(host,port));
-			out = new DataOutputStream(socket.getOutputStream());
-			in = new BufferedInputStream(socket.getInputStream());
-			
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
+    /**
+     RUStoreClient Constructor, initializes default values
+     for class members
 
-	}
+     @param host host url
+     @param port port number
+     */
+    public RUStoreClient ( final String host,
+                           final int port )
+    {
+        this.host = host;
+        this.port = port;
+    }
 
-	/**
-	 * Sends an arbitrary data object to the object store server. If an 
-	 * object with the same key already exists, the object should NOT be 
-	 * overwritten
-	 * 
-	 * @param key	key to be used as the unique identifier for the object
-	 * @param data	byte array representing arbitrary data object
-	 * 
-	 * @return		0 upon success
-	 *        		1 if key already exists
-	 *        		Throw an exception otherwise
-	 * @throws IOException
-	 * @throws InterruptedException
-	 */
-	public int put(String key, byte[] data) throws IOException, InterruptedException {
-		ByteBuffer buffer = ByteBuffer.allocate(oPut.getByteLength() + BYTES_PER_INTEGER + key.getBytes().length + BYTES_PER_INTEGER + data.length);
-		buffer.putInt( oPut.getCode());
-		buffer.putInt(key.getBytes().length);
-		buffer.putInt(data.length);
-		buffer.put(data);
+    /**
+     Opens a socket and establish a connection to the object store server
+     running on a given host and port.
 
-		
-		out.write(buffer.array());
-		out.flush();
-		Thread.sleep(200);
-		byte[] response = new byte[BYTES_PER_INTEGER];
-		in.read(response, 0 , BYTES_PER_INTEGER);
+     @return n/a, however throw an exception if any issues occur
+     */
+    public void connect ()
+            throws IOException
+    {
+        this.socket = new Socket();
+        this.socket.connect( new InetSocketAddress( host, port ) );
+        this.out = new BufferedOutputStream( socket.getOutputStream() );
+        this.in = new BufferedInputStream( socket.getInputStream() );
+    }
 
-		
-		// Implement here
-		return ByteBuffer.wrap(response).getInt();
+    /**
+     Sends an arbitrary data object to the object store server. If an
+     object with the same key already exists, the object should NOT be
+     overwritten
 
-	}
+     @param key key to be used as the unique identifier for the object
+     @param data byte array representing arbitrary data object
+     @return 0 upon success
+     1 if key already exists
+     Throw an exception otherwise
+     */
+    public int put ( final String key,
+                     final byte[] data )
+            throws IOException, InterruptedException
+    {
+        ByteBuffer buffer = ByteBuffer.allocate( oPut.getByteLength() + byteSize + key.getBytes().length + byteSize + data.length );
+        buffer.putInt( oPut.getCode() );  // Operation code
+        buffer.putInt( key.getBytes().length );    // Size of the key
+        buffer.put( key.getBytes() );              // The key
+        buffer.putInt( data.length );              // Size of the object
+        buffer.put( data );                        // The object
 
-	/**
-	 * Sends an arbitrary data object to the object store server. If an 
-	 * object with the same key already exists, the object should NOT 
-	 * be overwritten.
-	 * 
-	 * @param key	key to be used as the unique identifier for the object
-	 * @param file_path	path of file data to transfer
-	 * 
-	 * @return		0 upon success
-	 *        		1 if key already exists
-	 *        		Throw an exception otherwise
-	 * @throws IOException
-	 * @throws FileNotFoundException
-	 * @throws InterruptedException
-	 */
-	public int put(String key, String file_path) throws FileNotFoundException, IOException, InterruptedException {
-		File file = new File(file_path);
-		byte[] data = new byte[(int) file.length()];
-		try(FileInputStream in = new FileInputStream(file)){
-			in.read(data);
-		}
-		// Implement here
-		return put(key, data);
+        // Send the data object to the object store server.
+        out.write( buffer.array() );
+        out.flush();
 
-	}
+        // Wait for the server to process the data before reading the response.
+        Thread.sleep( 2000 );
 
-	/**
-	 * Downloads arbitrary data object associated with a given key
-	 * from the object store server.
-	 * 
-	 * @param key	key associated with the object
-	 * 
-	 * @return		object data as a byte array, null if key doesn't exist.
-	 *        		Throw an exception if any other issues occur.
-	 * @throws IOException
-	 */
-	public byte[] get(String key) throws IOException {
-		ByteBuffer buffer = ByteBuffer.allocate( oGet.getByteLength() + BYTES_PER_INTEGER + key.getBytes().length);
-		buffer.putInt(oGet.getCode());
-		buffer.putInt(key.getBytes().length);
-		buffer.put(key.getBytes());
+        // Get the result code from the object store server.
+        byte[] response = new byte[byteSize];
+        in.read( response, 0, byteSize );
 
-		out.write(buffer.array());
-		out.flush();
+        return ByteBuffer.wrap( response ).getInt(); // either SUCCESS or KEY_ALREADY_EXIST
+    }
 
-		byte[] response = new byte[BYTES_PER_INTEGER];
-		in.read(response);
-		int code = ByteBuffer.wrap(response).getInt();
+    /**
+     Sends an arbitrary data object to the object store server. If an
+     object with the same key already exists, the object should NOT
+     be overwritten.
 
-		if(code == KEY_ALREADY_EXIST){
-			response = new byte[BYTES_PER_INTEGER];
-			in.read(response);
-			int objectLength = ByteBuffer.wrap(response).getInt();
-			response = new byte[objectLength];
-			in.read(response);
-			return ByteBuffer.wrap(response).array();
-		}
-		else{
-			return null;
-		}
-		
-		// Implement here
+     @param key key to be used as the unique identifier for the object
+     @param file_path path of file data to transfer
+     @return 0 upon success
+     1 if key already exists
+     Throw an exception otherwise
+     */
+    public int put ( final String key,
+                     final String file_path )
+            throws IOException, InterruptedException
+    {
+        File file = new File( file_path );
+        byte[] data = new byte[( int ) file.length()];
+        try ( FileInputStream in = new FileInputStream( file ) )
+        {
+            in.read( data );
+        }
 
-	}
+        return put( key, data );
+    }
 
-	/**
-	 * Downloads arbitrary data object associated with a given key
-	 * from the object store server and places it in a file. 
-	 * 
-	 * @param key	key associated with the object
-	 * @param	file_path	output file path
-	 * 
-	 * @return		0 upon success
-	 *        		1 if key doesn't exist
-	 *        		Throw an exception otherwise
-	 * @throws IOException
-	 * @throws FileNotFoundException
-	 */
-	public int get(String key, String file_path) throws FileNotFoundException, IOException {
-		byte[] data = get(key);
-		if(data == null){
-			return KEY_NOT_EXIST;
-		}
-		else{
-			File file = new File(file_path);
-			try(FileOutputStream out = new FileOutputStream((file))){
-				out.write(data);
-				return SUCCESS;
-			}
-		}
-		// Implement here
+    /**
+     Downloads arbitrary data object associated with a given key
+     from the object store server.
 
-	}
+     @param key key associated with the object
+     @return object data as a byte array, null if key doesn't exist.
+     Throw an exception if any other issues occur.
+     */
+    public byte[] get ( final String key )
+            throws IOException
+    {
+        ByteBuffer buffer = ByteBuffer.allocate( oGet.getByteLength() + byteSize + key.getBytes().length );
+        buffer.putInt( oGet.getCode() );  // Operation code
+        buffer.putInt( key.getBytes().length );    // Size of the key
+        buffer.put( key.getBytes() );              // The key
 
-	/**
-	 * Removes data object associated with a given key 
-	 * from the object store server. Note: No need to download the data object, 
-	 * simply invoke the object store server to remove object on server side
-	 * 
-	 * @param key	key associated with the object
-	 * 
-	 * @return		0 upon success
-	 *        		1 if key doesn't exist
-	 *        		Throw an exception otherwise
-	 * @throws IOException
-	 */
-	public int remove(String key) throws IOException {
-		ByteBuffer buffer = ByteBuffer.allocate(oRemove.getByteLength() + BYTES_PER_INTEGER + key.getBytes().length);
-		buffer.putInt(oRemove.getCode());
-		buffer.putInt(key.getBytes().length);
-		buffer.put(key.getBytes());
+        out.write( buffer.array() );
+        out.flush();
 
-		out.write(buffer.array());
-		out.flush();
+        byte[] response = new byte[byteSize];
+        in.read( response );
+        int resultCode = ByteBuffer.wrap( response ).getInt();
 
-		byte[] response = new byte[BYTES_PER_INTEGER];
-		in.read(response);
+        if ( resultCode == existedKey )
+        {
+            response = new byte[byteSize];
+            in.read( response );
+            int objectLength = ByteBuffer.wrap( response ).getInt();
 
-		// Implement here
-		return ByteBuffer.wrap(response).getInt();
+            response = new byte[objectLength];
+            in.read( response );
 
-	}
+            return ByteBuffer.wrap( response ).array();
+        }
+        else
+        {
+            return null;
+        }
+    }
 
-	/**
-	 * Retrieves of list of object keys from the object store server
-	 * 
-	 * @return		List of keys as string array, null if there are no keys.
-	 *        		Throw an exception if any other issues occur.
-	 * @throws IOException
-	 */
-	public String[] list() throws IOException {
-		ByteBuffer buffer = ByteBuffer.allocate(oList.getByteLength());
-		buffer.putInt(oList.getCode());
+    /**
+     Downloads arbitrary data object associated with a given key
+     from the object store server and places it in a file.
 
-		out.write(buffer.array());
-		out.flush();
+     @param key key associated with the object
+     @param file_path output file path
+     @return 0 upon success
+     1 if key doesn't exist
+     Throw an exception otherwise
+     */
+    public int get ( final String key,
+                     final String file_path )
+            throws IOException
+    {
+        byte[] data = get( key );
 
-		byte[] response = new byte[BYTES_PER_INTEGER];
-		in.read(response);
-		int size = ByteBuffer.wrap( response).getInt();
+        if ( data == null )
+        {
+            return notExistedKey;
+        }
+        else
+        {
+            File file = new File( file_path );
+            try ( FileOutputStream out = new FileOutputStream( file ) )
+            {
+                out.write( data );
+                return success;
+            }
+        }
+    }
 
-		if(size == 0){
-			return null;
-		}
+    /**
+     Removes data object associated with a given key
+     from the object store server. Note: No need to download the data object,
+     simply invoke the object store server to remove object on server side
 
-		response = new byte[size];
-		in.read(response);
-		ByteArrayInputStream input = new ByteArrayInputStream(response);
-		ByteArrayOutputStream output = new ByteArrayOutputStream();
+     @param key key associated with the object
+     @return 0 upon success
+     1 if key doesn't exist
+     Throw an exception otherwise
+     */
+    public int remove ( final String key )
+            throws IOException
+    {
+        ByteBuffer buffer = ByteBuffer.allocate( oRemove.getByteLength() + byteSize + key.getBytes().length );
+        buffer.putInt( oRemove.getCode() ); // Operation code
+        buffer.putInt( key.getBytes().length );      // Size of the key
+        buffer.put( key.getBytes() );                // The key
 
-		int len;
-		byte[] bytes = new byte[1024];
-		while(( len = input.read(bytes, 0, bytes.length)) != -1){
-			output.write(bytes, 0, len);
-		}
-		// Implement here
-		return output.toString().split("\\/");
+        out.write( buffer.array() );
+        out.flush();
 
-	}
+        byte[] response = new byte[byteSize];
+        in.read( response );
 
-	/**
-	 * Signals to server to close connection before closes 
-	 * the client socket.
-	 * 
-	 * @return		n/a, however throw an exception if any issues occur
-	 */
-	public void disconnect() {
+        return ByteBuffer.wrap( response ).getInt();  
+    }
 
-		// Implement here
-		try {
-			ByteBuffer buffer = ByteBuffer.allocate( oDisconnect.getByteLength());
-			buffer.putInt( oDisconnect.getCode());
-			out.write(buffer.array());
+    /**
+     Retrieves of list of object keys from the object store server
 
-			out.close();
-			in.close();
-			socket.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+     @return Array of keys as string array, null if there are no keys.
+     Throw an exception if any other issues occur.
+     */
+    public String[] list ()
+            throws IOException
+    {
+        ByteBuffer buffer = ByteBuffer.allocate( oList.getByteLength() );
+        buffer.putInt( oList.getCode() ); // Operation code
 
-	}
+        // Send the data object to the object store server.
+        out.write( buffer.array() );
+        out.flush();
 
+        // Get the response
+        byte[] response = new byte[byteSize];
+        in.read( response );
+        int listSize = ByteBuffer.wrap( response ).getInt();
+
+        if ( listSize == 0 )
+        {
+            return null;
+        }
+
+        response = new byte[listSize];
+        in.read( response );
+
+        ByteArrayInputStream inputStream = new ByteArrayInputStream( response );
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        int len;
+        byte[] bytes = new byte[1024];
+        while ( (len = inputStream.read( bytes, 0, bytes.length )) != -1 )
+        {
+            outputStream.write( bytes, 0, len );
+        }
+
+        return outputStream.toString().split( "\\|" );
+    }
+
+    /**
+     Signals to server to close connection before closes
+     the client socket.
+
+     @return n/a, however throw an exception if any issues occur
+     */
+    public void disconnect ()
+            throws IOException
+    {
+        ByteBuffer buffer = ByteBuffer.allocate( oDisconnect.getByteLength() );
+        buffer.putInt( oDisconnect.getCode() ); // Operation code
+
+        out.write( buffer.array() );
+        out.flush();
+
+        in.close();
+        out.close();
+        socket.close();
+    }
 }
